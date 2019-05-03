@@ -141,7 +141,7 @@ instance ToJSON MaybeEmployee
 -- deriving instance (Constraints (Employee' f) ToJSON) => ToJSON (Employee' f)
 -- deriving instance (Constraints (Employee' f) FromJSON) => FromJSON (Employee' f)
 
--- p1, p2 :: LastPerson
+p1, p2 :: LastPerson
 p1 = Person { pName = Last "X", pAge = Last 10 }
 p2 = Person { pName = Last "Y", pAge = Last 20 }
 
@@ -149,7 +149,9 @@ p2 = Person { pName = Last "Y", pAge = Last 20 }
 p1' = validate p1
 p2' = validate p2
 
-p12 = getLast $ validate $ p1 <> p2
+-- gvalidate is worse on inferring type than validate!!
+p12 :: Person
+p12 = getLast $ gvalidate $ p1 <> p2
 
 e0 :: MaybeEmployee
 e0 = Employee { pName = Nothing, pAge = Just 18, pSsn = Nothing }
