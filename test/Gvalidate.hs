@@ -29,11 +29,12 @@ gvalidate = gtraverse @(F f) id
 -- gpure :: ...  => t -> t' f
 -- e.g.:  Person -> Person' Mabye
 
--- are there higher kinded generic fmap and liftA2?
+-- higher kinded generic fmap and liftA2?
 -- gfmap :: ... => (f ~> g) -> t f -> t g
--- e.g. :  t Maybe ~> t (Validation [b])
+-- gfmap :: (Maybe a -> Validation [b]) -> Person' Maybe -> Person' (Validation [b])
 --
--- gliftA2 :: ... => (f ~> g ~>) -> t f -> t g -> t h
--- e.g.: t (Const b) ~> t Maybe ~> t (Validation [b])
+-- gliftA2 :: ... => (f ~> g ~> h) -> t f -> t g -> t h
+-- gliftA2 :: (Const b -> Maybe a -> Validation [b] a)
+--         -> Person' (Const b) -> Person' Maybe -> Person' (Validation [b])
 
 -- hence, Higher Kinded Applicative!
