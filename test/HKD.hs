@@ -1,9 +1,12 @@
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveAnyClass             #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedLabels           #-}
 {-# LANGUAGE PartialTypeSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -12,37 +15,34 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
-module HKD where
-
 import Control.Applicative
 import Control.Monad.Trans.Identity
 import Data.Aeson hiding (Success)
+import Data.Coerce
+import Data.Function ((&))
+import Data.Either.Validation
 import Data.Functor.Const
 import Data.Functor.Identity
+import Data.Generics.Internal.VL.Lens
 import Data.Generics.Labels ()
 import Data.Generics.Product
-import Data.Monoid hiding (First(..), Last(..))
+import Data.Monoid hiding (First (..), Last (..))
 import Data.Semigroup
-import Data.Coerce
-import Data.Validation hiding (validate)
-import Generic.Data hiding (gtraverse)
+import Generic.Data
 import Generic.Data.Orphans ()
 import Generics.OneLiner
 import GHC.Generics
-import Prelude hiding (First (..), Last (..))
 
 import Gvalidate
 
-gcoerce
-  :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b) => a -> b
+gcoerce :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b) 
+        => a -> b
 gcoerce = to . coerce' . from
  where
   coerce' :: Coercible f g => f () -> g ()
   coerce' = coerce
 
-gcoerceBinop
-  :: forall a b
-   . (Coercible (Rep a) (Rep b), Generic a, Generic b)
+gcoerceBinop :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b)
   => (a -> a -> a)
   -> (b -> b -> b)
 gcoerceBinop binop x y = gcoerce (gcoerce x `binop` gcoerce y)
@@ -53,8 +53,8 @@ gcoerceBinop binop x y = gcoerce (gcoerce x `binop` gcoerce y)
 
 type family HKD f a where
   HKD Identity a = a
-  HKD (IdentityT f) a = f a
   HKD (Const u) a = u
+  HKD (IdentityT f) a = f a
   HKD f a = f a
 
 class GValidate f i o where
@@ -100,6 +100,9 @@ data Person' f = Person
   }
   deriving (Generic)
 
+type Person = Person' Identity
+type LastPerson = Person' Last
+
 newtype SSN = SSN String
   deriving (Show, Generic, ToJSON, FromJSON)
 
@@ -109,16 +112,16 @@ data Employee' f = Employee
   , pSsn  :: HKD f SSN
   } deriving (Generic)
 
-type Person = Person' Identity
-type LastPerson = Person' Last
-
 type Employee = Employee' Identity
-type MaybeEmployee = Employee' (IdentityT Maybe)
-type ValidEmployee = Employee' (IdentityT (Validation [(Integer, String)]))
+type MaybeEmployee = Employee' Maybe
+type MaybeEmployee1 = Employee' (IdentityT Maybe)
+type ValidEmployee = Employee' (IdentityT (Validation String))
 
 deriving instance (Constraints (Person' f) Show) => Show (Person' f)
 deriving instance (Constraints (Employee' f) Show) => Show (Employee' f)
 
+-- instance Semigroup LastPerson where
+--   (<>) = gmappend
 instance Semigroup (Rep (Person' f) ()) => Semigroup (Person' f) where
   (<>) = gmappend
 
@@ -128,18 +131,13 @@ instance (Semigroup u) => Semigroup (Employee' (Const u)) where
 instance Alternative f => Semigroup (Employee' (IdentityT f)) where
   (<>) = gcoerceBinop (gmappend @(Employee' (IdentityT (Alt f))))
 
--- instance Semigroup LastPerson where
---   (<>) = gmappend
-
 instance ToJSON Person
 instance FromJSON Person
 instance ToJSON LastPerson
 instance FromJSON LastPerson
-instance FromJSON MaybeEmployee
-instance ToJSON MaybeEmployee
 
--- deriving instance (Constraints (Employee' f) ToJSON) => ToJSON (Employee' f)
--- deriving instance (Constraints (Employee' f) FromJSON) => FromJSON (Employee' f)
+deriving instance (Constraints (Employee' f) ToJSON) => ToJSON (Employee' f)
+deriving instance (Constraints (Employee' f) FromJSON) => FromJSON (Employee' f)
 
 p1, p2 :: LastPerson
 p1 = Person { pName = Last "X", pAge = Last 10 }
@@ -157,38 +155,46 @@ e0 :: MaybeEmployee
 e0 = Employee { pName = Nothing, pAge = Just 18, pSsn = Nothing }
 
 e1 :: MaybeEmployee
-e1 = Employee { pName = Just "Joe"
-              , pAge  = Just 23
-              , pSsn  = Just (SSN "123-4567-890")
-              }
+e1 = Employee { pName = Just "Joe", pAge = Just 23, pSsn = Just (SSN "123-4567-890") }
 
-e01 = e0 <> e1
+_ = validate e0
+_ = validate e1
 
-e0', e1', e01' :: _ Employee
-e0' = gvalidate e0
-e1' = gvalidate e1
-e01' = gvalidate e01
+e0', e1', e01 :: MaybeEmployee1
+e0' = gcoerce e0
+e1' = gcoerce e1
+e01 = e1' <> e0'
+Just (e01' :: Employee) = gvalidate e01
 
 e2 :: ValidEmployee
 e2 = Employee { pName = Success "Joe"
-              , pAge  = Success 30
-              , pSsn  = Failure [(3, "Employee missing SSN")]
+              , pAge  = Success 40
+              , pSsn  = Failure "Employee missing SSN;"
               }
 
--- Success e2' = validate e2
-
 e3 :: ValidEmployee
-e3 = Employee { pName = Failure [(1, "Employee missing Name")]
-              , pAge  = Success 40
+e3 = Employee { pName = Failure "Employee missing Name;"
+              , pAge  = Failure "Employee missing Age;"
               , pSsn  = Success (SSN "123-4567-890")
               }
 
-e2', e3'  :: Validation _ Employee
+e2', e3', e23' :: Validation _ Employee
 e2' = gvalidate e2
 e3' = gvalidate e3
+e23' = gvalidate $ e2 <> e3
 
--- This should work if Validation has an Alternative instance
--- e23, e32 :: ValidEmployee
--- e23 = e2 <> e3
--- e32 = e3 <> e2
+e32 :: Employee
+Success e32 = gvalidate $ e3 <> e2
 
+age :: Lens' Employee Int
+age = #pAge
+
+main :: IO ()
+main = do
+  print $ encode p1
+  print $ encode p2
+  print $ encode p12
+  print $ e32 & set (field' @"pName") "Anna"
+  print $ view #pName e32
+  print $ set age 10 e32
+  print $ view age e32

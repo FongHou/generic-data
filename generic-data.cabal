@@ -60,15 +60,15 @@ test-suite unit-test
 
 test-suite record-test
   hs-source-dirs: test
-  main-is: record.hs
-  other-modules: Gvalidate, HKD
+  main-is: HKD.hs
+  other-modules: Gvalidate
   build-depends:
     generic-data,
     generic-lens,
     one-liner,
-    validation,
-    transformers,
     aeson,
+    either,
+    transformers,
     base
   ghc-options: -Wall
   default-language: Haskell2010

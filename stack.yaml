@@ -3,6 +3,9 @@ resolver: lts-13.13
 packages:
 - '.'
 
+extra-deps:
+- '../generic-lens'
+
 flags: {}
 
 extra-package-dbs: []
