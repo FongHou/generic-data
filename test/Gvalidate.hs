@@ -31,7 +31,7 @@ gvalidate = gtraverse @(F f) id
 --   => t -> t f
 
 -- Is there a generic FFunctor ffmap?
--- e.g. Person' Maybe ~> Person' Validation [String] a
+-- e.g. Person' Maybe ~> Person' Validation [String]
 -- gffmap
 --   :: ...
 --   => (forall x. g x -> h x)
