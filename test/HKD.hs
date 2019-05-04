@@ -10,6 +10,7 @@
 {-# LANGUAGE PartialTypeSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
@@ -19,11 +20,9 @@ import Control.Applicative
 import Control.Monad.Trans.Identity
 import Data.Aeson hiding (Success)
 import Data.Coerce
-import Data.Function ((&))
 import Data.Either.Validation
 import Data.Functor.Const
 import Data.Functor.Identity
-import Data.Generics.Internal.VL.Lens
 import Data.Generics.Labels ()
 import Data.Generics.Product
 import Data.Monoid hiding (First (..), Last (..))
@@ -32,17 +31,20 @@ import Generic.Data
 import Generic.Data.Orphans ()
 import Generics.OneLiner
 import GHC.Generics
+import Lens.Micro hiding (to, from)
 
 import Gvalidate
 
-gcoerce :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b) 
-        => a -> b
+gcoerce 
+  :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b)
+  => a -> b
 gcoerce = to . coerce' . from
  where
   coerce' :: Coercible f g => f () -> g ()
   coerce' = coerce
 
-gcoerceBinop :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b)
+gcoerceBinop
+  :: forall a b . (Coercible (Rep a) (Rep b), Generic a, Generic b)
   => (a -> a -> a)
   -> (b -> b -> b)
 gcoerceBinop binop x y = gcoerce (gcoerce x `binop` gcoerce y)
@@ -94,6 +96,18 @@ validate
 validate = fmap to . gvalidate_ . from
 
 --------------------------
+
+data Animal = Animal
+  { pName :: String
+  , pAge  :: Int
+  }
+  deriving (Show, Generic)
+
+a1 = Animal "Puppy" 1
+
+p0 :: Person
+p0 = gcoerce a1
+
 data Person' f = Person
   { pName :: HKD f String
   , pAge  :: HKD f Int
@@ -131,6 +145,10 @@ instance (Semigroup u) => Semigroup (Employee' (Const u)) where
 instance Alternative f => Semigroup (Employee' (IdentityT f)) where
   (<>) = gcoerceBinop (gmappend @(Employee' (IdentityT (Alt f))))
 
+instance Alternative f => Monoid (Employee' (IdentityT f)) where
+  mempty = gcoerce (gmempty @(Employee' (IdentityT (Alt f))))
+  mappend = (<>)
+
 instance ToJSON Person
 instance FromJSON Person
 instance ToJSON LastPerson
@@ -140,14 +158,15 @@ deriving instance (Constraints (Employee' f) ToJSON) => ToJSON (Employee' f)
 deriving instance (Constraints (Employee' f) FromJSON) => FromJSON (Employee' f)
 
 p1, p2 :: LastPerson
-p1 = Person { pName = Last "X", pAge = Last 10 }
-p2 = Person { pName = Last "Y", pAge = Last 20 }
+p1 = Person { pName = Last "Bob", pAge = Last 10 }
+p2 = Person { pName = Last "Bob", pAge = Last 20 }
 
+-- validate infers type!
 -- p1', p2' :: Last Person
-p1' = validate p1
-p2' = validate p2
+p1' = getLast $ validate p1
+p2' = getLast $ validate p2
 
--- gvalidate is worse on inferring type than validate!!
+-- gvalidate needs type!
 p12 :: Person
 p12 = getLast $ gvalidate $ p1 <> p2
 
@@ -160,11 +179,12 @@ e1 = Employee { pName = Just "Joe", pAge = Just 23, pSsn = Just (SSN "123-4567-8
 _ = validate e0
 _ = validate e1
 
+
+-- lift f ~ (IdentityT f) to get Alternative instance
 e0', e1', e01 :: MaybeEmployee1
 e0' = gcoerce e0
 e1' = gcoerce e1
-e01 = e1' <> e0'
-Just (e01' :: Employee) = gvalidate e01
+e01 = mempty <> e1' <> e0' <> mempty
 
 e2 :: ValidEmployee
 e2 = Employee { pName = Success "Joe"
@@ -178,23 +198,25 @@ e3 = Employee { pName = Failure "Employee missing Name;"
               , pSsn  = Success (SSN "123-4567-890")
               }
 
-e2', e3', e23' :: Validation _ Employee
+e2', e3' :: Validation _ Employee
 e2' = gvalidate e2
 e3' = gvalidate e3
-e23' = gvalidate $ e2 <> e3
-
-e32 :: Employee
-Success e32 = gvalidate $ e3 <> e2
-
-age :: Lens' Employee Int
-age = #pAge
 
 main :: IO ()
 main = do
-  print $ encode p1
-  print $ encode p2
-  print $ encode p12
-  print $ e32 & set (field' @"pName") "Anna"
-  print $ view #pName e32
+  let Just (e01' :: Employee) = gvalidate e01
+  print $ encode e01'
+  print e2'
+  print e3'
+  let Success e32 = gvalidate $ e3 <> e2
+  print $ encode e32
+  print $ e32 ^. #pName
+  -- doesn't work!? 
+  -- print $ set #pAge 11 e32
+  -- why set #label choose HasField instance, not HasField'?
+  -- print $ set (field @"pAge") 11 e32
+  print $ set (field' @"pAge") 11 e32
+  let age :: Lens' Employee Int
+      age = #pAge
   print $ set age 10 e32
-  print $ view age e32
+  print $ e32 ^. age

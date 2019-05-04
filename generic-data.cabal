@@ -68,6 +68,8 @@ test-suite record-test
     one-liner,
     aeson,
     either,
+    microlens,
+    microlens-th,
     transformers,
     base
   ghc-options: -Wall
