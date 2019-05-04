@@ -24,15 +24,16 @@ gvalidate
   => t -> f t'
 gvalidate = gtraverse @(F f) id
 
--- Can pure fields be lifted into applictives using pure :: (Applicative f) => a -> f a
--- e.g. Person -> Person' Mabye
--- gpure
---   :: ...
---   => t -> t f
+-- is there a way to lift pure fields (no Identity wrapper) into applictives 
+-- using pure :: (Applicative f) => a -> f a
+-- gpure :: ...  => t -> t' f
+-- e.g.:  Person -> Person' Mabye
 
--- Is there a generic FFunctor ffmap?
--- e.g. Person' Maybe ~> Person' Validation [String]
--- gffmap
---   :: ...
---   => (forall x. g x -> h x)
---   ->  f g -> f h
+-- are there higher kinded generic fmap and liftA2?
+-- gfmap :: ... => (f ~> g) -> t f -> t g
+-- e.g. :  t Maybe ~> t (Validation [b])
+--
+-- gliftA2 :: ... => (f ~> g ~>) -> t f -> t g -> t h
+-- e.g.: t (Const b) ~> t Maybe ~> t (Validation [b])
+
+-- hence, Higher Kinded Applicative!
